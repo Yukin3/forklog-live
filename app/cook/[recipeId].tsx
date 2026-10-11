@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -25,14 +25,18 @@ import { answerRecipeQuestion as answer, type QuestionId } from '@/lib/recipeGui
 function AskSheet({ visible, onClose, onAsk, language }: { language: GuidanceLanguage; visible: boolean; onClose: () => void; onAsk: (q: QuestionId) => void }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.sheetBackdrop} onPress={onClose} accessibilityLabel="Close" />
-      <View style={s.sheet}>
-        <Text style={s.sheetTitle}>{language === 'es' ? 'Guía de la receta' : 'Recipe guidance'}</Text>
-        <Muted size={14}>Preset answers from your selected recipe version. Tap a question; no microphone conversation.</Muted>
-        <View style={s.controls}><Button title="English" variant={language === 'en' ? 'primary' : 'ghost'} onPress={() => preferences.setLanguage('en')} /><Button title="Español" variant={language === 'es' ? 'primary' : 'ghost'} onPress={() => preferences.setLanguage('es')} /></View>
-        <Muted size={14}>{language === 'es' ? UNTRANSLATED : 'Local preset phrases only. Source text, ingredient names and units remain unchanged; camera coaching stays in English.'}</Muted>
-        {(Object.keys(PRESET_LABELS[language]) as QuestionId[]).map(id => <Button key={id} title={PRESET_LABELS[language][id]} variant="ghost" size="lg" onPress={() => onAsk(id)} />)}
-        <Button title="Close" onPress={onClose} />
+      <View style={s.sheetHost}>
+        <Pressable style={s.sheetBackdrop} onPress={onClose} accessibilityLabel="Close" />
+        <SafeAreaView edges={['bottom']} style={s.sheet}>
+          <ScrollView style={s.sheetScroll} contentContainerStyle={s.sheetContent}>
+            <Text style={s.sheetTitle}>{language === 'es' ? 'Guía de la receta' : 'Recipe guidance'}</Text>
+            <Muted size={14}>Preset answers from your selected recipe version. Tap a question; no microphone conversation.</Muted>
+            <View style={s.controls}><Button title="English" variant={language === 'en' ? 'primary' : 'ghost'} onPress={() => preferences.setLanguage('en')} /><Button title="Español" variant={language === 'es' ? 'primary' : 'ghost'} onPress={() => preferences.setLanguage('es')} /></View>
+            <Muted size={14}>{language === 'es' ? UNTRANSLATED : 'Local preset phrases only. Source text, ingredient names and units remain unchanged; camera coaching stays in English.'}</Muted>
+            {(Object.keys(PRESET_LABELS[language]) as QuestionId[]).map(id => <Button key={id} style={s.wrapButton} title={PRESET_LABELS[language][id]} variant="ghost" size="lg" onPress={() => onAsk(id)} />)}
+          </ScrollView>
+          <Button title="Close" onPress={onClose} />
+        </SafeAreaView>
       </View>
     </Modal>
   );
@@ -46,6 +50,7 @@ export default function CookScreen() {
   useKeepAwake();
   const [perm, requestPerm] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
+  const contentRef = useRef<ScrollView>(null);
   const loopRef = useRef<VisionLoop | null>(null);
 
   const [version, setVersion] = useState<VersionRow | null>(null);
@@ -167,6 +172,7 @@ export default function CookScreen() {
     if (n < 1 || n > steps.length || n === stepRef.current) return;
     const target = steps[n - 1];
     setStepN(n);
+    contentRef.current?.scrollTo({ y: 0, animated: true });
     stepRef.current = n;
     setDetected(new Map());
     setLastEvent(null);
@@ -283,92 +289,96 @@ export default function CookScreen() {
         </View>
       )}
       <SafeAreaView style={s.overlay} edges={['top', 'bottom']}>
-        {/* top: step */}
-        <ScrollView style={s.topScroll} contentContainerStyle={s.top} showsVerticalScrollIndicator={false}>
-          <View style={s.topRow}>
-            <View style={s.topChips}>
-              <Chip label={steps.length ? `Step ${stepN} of ${steps.length}` : 'Loading recipe…'} tone="active" />
-              {demo && <Chip label="DEMO" tone="warn" />}
-              {!demo && stats?.scripted === true && <Chip label="BACKEND STUB" tone="warn" />}
-              {version && <Chip label={`v${version.number}${dirty ? ' · draft' : ''}`} />}
+        <ScrollView ref={contentRef} style={s.cookScroll} contentContainerStyle={s.cookContent}>
+          {/* top: step and review */}
+          <View style={s.top}>
+            <View style={s.topRow}>
+              <View style={s.topChips}>
+                <Chip label={steps.length ? `Step ${stepN} of ${steps.length}` : 'Loading recipe…'} tone="active" />
+                {demo && <Chip label="DEMO" tone="warn" />}
+                {!demo && stats?.scripted === true && <Chip label="BACKEND STUB" tone="warn" />}
+                {version && <Chip label={`v${version.number}${dirty ? ' · draft' : ''}`} />}
+              </View>
+              <Pressable onPress={toggleMute} style={s.iconBtn} accessibilityLabel={muted ? 'Unmute coach' : 'Mute coach'}>
+                <Text style={s.iconText}>{muted ? '🔇' : '🔊'}</Text>
+              </Pressable>
             </View>
-            <Pressable onPress={toggleMute} style={s.iconBtn} accessibilityLabel={muted ? 'Unmute coach' : 'Mute coach'}>
-              <Text style={s.iconText}>{muted ? '🔇' : '🔊'}</Text>
-            </Pressable>
+            {step && (
+              <View style={s.stepBox}>
+                <Text style={s.stepText}>{recipe ? instructionText(recipe, step.n) : step.text}</Text>
+                {recipe && hasAdaptations(recipe) && <Text style={s.cue}>Source instruction (review for your changes): {step.text}</Text>}
+                <Text style={s.cue}>Source visual cue: {step.visual_cue}</Text>
+              </View>
+            )}
+            <IngredientReview reminders={reminders} acknowledged={!needsReview} onAcknowledge={() => setReviewAcknowledged(reviewKey)} onLeave={() => router.back()} />
+            {preferenceError && <ErrorBox message={preferenceError} />}
+            {error && <ErrorBox message={error} />}
+            {dirty && <Muted size={14}>Draft changes: coaching paused until saved. Original v{version?.number} is preserved.</Muted>}
+            {demo && recipe && hasAdaptations(recipe) && <Muted size={14}>Adapted DEMO: recipe guidance only. Scripted camera comparisons are disabled.</Muted>}
           </View>
-          {step && (
-            <View style={s.stepBox}>
-              <Text style={s.stepText}>{recipe ? instructionText(recipe, step.n) : step.text}</Text>
-              {recipe && hasAdaptations(recipe) && <Text style={s.cue}>Source instruction (review for your changes): {step.text}</Text>}
-              <Text style={s.cue}>Source visual cue: {step.visual_cue}</Text>
-            </View>
-          )}
-          <IngredientReview reminders={reminders} acknowledged={!needsReview} onAcknowledge={() => setReviewAcknowledged(reviewKey)} onLeave={() => router.back()} />
-          {preferenceError && <ErrorBox message={preferenceError} />}
-          {error && <ErrorBox message={error} />}
-          {dirty && <Muted size={14}>Draft changes: coaching paused until saved. Original v{version?.number} is preserved.</Muted>}
-          {demo && recipe && hasAdaptations(recipe) && <Muted size={14}>Adapted DEMO: recipe guidance only. Scripted camera comparisons are disabled.</Muted>}
-        </ScrollView>
 
-        {/* middle: what the coach is saying */}
-        <ScrollView style={s.middleScroll} contentContainerStyle={s.middle} showsVerticalScrollIndicator={false}>
-          {banner && (
-            <View style={[s.banner, lastEvent?.severity === 'stop' && s.bannerStop]}>
-              <Text style={s.bannerText}>{banner}</Text>
-            </View>
-          )}
-        </ScrollView>
+          {/* middle: what the coach is saying */}
+          <View style={s.middle}>
+            {banner && (
+              <View style={[s.banner, lastEvent?.severity === 'stop' && s.bannerStop]}>
+                <Text style={s.bannerText}>{banner}</Text>
+              </View>
+            )}
+          </View>
 
-        {/* bottom: chips, mic, controls */}
-        <View style={s.bottom}>
-          <View style={s.chipsRow}>
-            <View style={s.chips}>
-              {[...expected, ...omitted].map(name => <Pressable key={name} style={s.ingredientPill} accessibilityRole="button" accessibilityLabel={`${omitted.includes(name) ? 'Undo omission of' : 'Omit'} ${name}`} disabled={saving || !!pendingVersion.current} onPress={() => changeIngredient(name, { omitted: !omitted.includes(name) })}><Chip label={omitted.includes(name) ? `Omitted · ${name} ↶` : isDetected(name) ? `✓ ${name}${detectedAmount(name) ? ` · ${detectedAmount(name)}` : ''}` : name} tone={omitted.includes(name) ? 'neutral' : isDetected(name) ? 'good' : 'active'} /></Pressable>)}
-              {extras.map(name => <Chip key={name} label={`? ${name}`} tone="warn" />)}
+          {/* ingredient controls scroll; step navigation stays reachable */}
+          <View style={s.bottom}>
+            <View style={s.chipsRow}>
+              <View style={s.chips}>
+                {[...expected, ...omitted].map(name => <Pressable key={name} style={s.ingredientPill} accessibilityRole="button" accessibilityLabel={`${omitted.includes(name) ? 'Undo omission of' : 'Omit'} ${name}`} disabled={saving || !!pendingVersion.current} onPress={() => changeIngredient(name, { omitted: !omitted.includes(name) })}><Chip label={omitted.includes(name) ? `Omitted · ${name} ↶` : isDetected(name) ? `✓ ${name}${detectedAmount(name) ? ` · ${detectedAmount(name)}` : ''}` : name} tone={omitted.includes(name) ? 'neutral' : isDetected(name) ? 'good' : 'active'} /></Pressable>)}
+                {extras.map(name => <View key={name} style={s.ingredientPill}><Chip label={`? ${name}`} tone="warn" /></View>)}
+              </View>
+              <Pressable disabled={needsReview} onPress={() => setAsking(true)} style={s.mic} accessibilityLabel="Preset recipe guidance">
+                <Text style={s.micIcon}>?</Text>
+                <Text style={s.micLabel}>Guide</Text>
+              </Pressable>
             </View>
-            <Pressable disabled={needsReview} onPress={() => setAsking(true)} style={s.mic} accessibilityLabel="Preset recipe guidance">
-              <Text style={s.micIcon}>?</Text>
-              <Text style={s.micLabel}>Guide</Text>
-            </Pressable>
+            <Button style={s.wrapButton} title="Ingredient choices / quantities" variant="ghost" disabled={!cookId || saving || finishing} onPress={() => { loopRef.current?.stop(); void speaker.stopAll(); setEditing(true); }} />
+            {dirty && <View style={s.controls}><Button title={pendingVersion.current ? 'Retry attach saved version' : 'Save child version & apply'} loading={saving} style={[s.wrapButton, { flex: 1, minWidth: 180 }]} onPress={() => void applyOptions()} /><Button title="Undo draft" variant="ghost" disabled={saving || !!pendingVersion.current} onPress={() => { setDraft(null); setError(null); }} /></View>}
+            {(saving || finishing) && <Muted size={14}>{saving ? 'Saving and attaching the selected recipe version…' : 'Finishing cook…'} {Math.max(0, Math.floor((now - (actionStartedAt ?? now)) / 1000))}s</Muted>}
+            {voiceLoadingAt !== null && <Muted size={14}>Preparing speech… {Math.max(0, Math.floor((now - voiceLoadingAt) / 1000))}s. Recipe guidance is shown above.</Muted>}
           </View>
-          <Button title="Ingredient choices / quantities" variant="ghost" disabled={!cookId || saving || finishing} onPress={() => { loopRef.current?.stop(); void speaker.stopAll(); setEditing(true); }} />
-          {dirty && <View style={s.controls}><Button title={pendingVersion.current ? 'Retry attach saved version' : 'Save child version & apply'} loading={saving} style={{ flex: 1 }} onPress={() => void applyOptions()} /><Button title="Undo draft" variant="ghost" disabled={saving || !!pendingVersion.current} onPress={() => { setDraft(null); setError(null); }} /></View>}
-          {(saving || finishing) && <Muted size={14}>{saving ? 'Saving and attaching the selected recipe version…' : 'Finishing cook…'} {Math.max(0, Math.floor((now - (actionStartedAt ?? now)) / 1000))}s</Muted>}
-          {voiceLoadingAt !== null && <Muted size={14}>Preparing speech… {Math.max(0, Math.floor((now - voiceLoadingAt) / 1000))}s. Recipe guidance is shown above.</Muted>}
-          <View style={s.controls}>
-            <Button title="Back" variant="ghost" size="lg" disabled={stepN <= 1} onPress={() => goStep(stepN - 1)} />
-            <Button title={stepN >= steps.length ? 'Last step' : 'Next step'} size="lg" style={{ flex: 1 }} disabled={!steps.length || stepN >= steps.length} onPress={() => goStep(stepN + 1)} />
-            <Button title="I'm done" variant="danger" size="lg" loading={finishing} disabled={!cookId || saving || dirty || needsReview} onPress={finish} />
-          </View>
-          <Text style={s.stats}>
-            {canRun ? '● ' : '○ '}
-            {demo ? 'demo · ' : stats?.scripted === true ? 'backend STUB_MODE · ' : stats?.scripted == null ? 'backend mode unverified · ' : ''}
-            {dirty || editing || needsReview ? 'coaching paused' : stats?.processing ? `Analyzing frame… ${Math.max(0, Math.floor((now - (stats.startedAt ?? now)) / 1000))}s` : stats ? `${stats.sent} sent · ${stats.ok} ok · ${stats.skipped} still${stats.lastLatencyMs != null ? ` · ${stats.lastLatencyMs} ms` : ''}` : canRun ? 'starting' : 'waiting for camera'}
-            {stats?.lastError ? ` · ${stats.lastError.slice(0, 40)}` : ''}
-          </Text>
+        </ScrollView>
+        <View style={s.controls}>
+          <Button style={s.navButton} title="Back" variant="ghost" size="lg" disabled={stepN <= 1} onPress={() => goStep(stepN - 1)} />
+          <Button title={stepN >= steps.length ? 'Last step' : 'Next step'} size="lg" style={s.navButton} disabled={!steps.length || stepN >= steps.length} onPress={() => goStep(stepN + 1)} />
+          <Button style={s.navButton} title="I'm done" variant="danger" size="lg" loading={finishing} disabled={!cookId || saving || dirty || needsReview} onPress={finish} />
         </View>
+        <Text style={s.stats}>
+          {canRun ? '● ' : '○ '}
+          {demo ? 'demo · ' : stats?.scripted === true ? 'backend STUB_MODE · ' : stats?.scripted == null ? 'backend mode unverified · ' : ''}
+          {dirty || editing || needsReview ? 'coaching paused' : stats?.processing ? `Analyzing frame… ${Math.max(0, Math.floor((now - (stats.startedAt ?? now)) / 1000))}s` : stats ? `${stats.sent} sent · ${stats.ok} ok · ${stats.skipped} still${stats.lastLatencyMs != null ? ` · ${stats.lastLatencyMs} ms` : ''}` : canRun ? 'starting' : 'waiting for camera'}
+          {stats?.lastError ? ` · ${stats.lastError.slice(0, 40)}` : ''}
+        </Text>
       </SafeAreaView>
       <AskSheet language={language} visible={asking} onClose={() => setAsking(false)} onAsk={ask} />
       <Modal visible={editing} transparent animationType="slide" onRequestClose={() => { if (!saving) setEditing(false); }}>
-        <View style={s.sheetBackdrop} />
-        <View style={[s.sheet, { maxHeight: '85%' }]}>
-          <Text style={s.sheetTitle}>Intentional ingredient choices</Text>
-          <Muted size={14}>Omit or restore ingredients; edit amounts in the existing units. Save a child version to resume coaching. Source steps and reference images stay mapped.</Muted>
-          <ScrollView keyboardShouldPersistTaps="handled">
-            {recipe?.ingredients.map(i => <View key={i.name} style={s.ingredientRow}>
-              <Text style={s.cue}>{i.name} · {i.unit || 'quantity'}</Text>
-              <View style={s.controls}>
-                <TextInput style={s.quantity} accessibilityLabel={`Quantity of ${i.name}`} value={i.qty} editable={!i.omitted && !saving && !pendingVersion.current} onChangeText={qty => changeIngredient(i.name, { qty })} />
-                <Button title={i.omitted ? 'Undo omission' : 'Omit'} variant="ghost" disabled={saving || !!pendingVersion.current} onPress={() => changeIngredient(i.name, { omitted: !i.omitted })} />
-              </View>
-            </View>)}
-          </ScrollView>
-          {preferenceError && <ErrorBox message={preferenceError} />}
-          {error && <ErrorBox message={error} />}
-          {saving && <Muted size={14}>Saving and attaching the child version… {Math.max(0, Math.floor((now - (actionStartedAt ?? now)) / 1000))}s</Muted>}
-          {dirty && <Button title={pendingVersion.current ? 'Retry attach saved version' : 'Save child version & apply'} loading={saving} onPress={() => void applyOptions()} />}
-          <Button title="Return to cook" variant="ghost" disabled={saving} onPress={() => setEditing(false)} />
-        </View>
+        <KeyboardAvoidingView style={s.sheetHost} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={s.sheetBackdrop} />
+          <SafeAreaView edges={['bottom']} style={s.sheet}>
+            <ScrollView style={s.sheetScroll} contentContainerStyle={s.sheetContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+              <Text style={s.sheetTitle}>Intentional ingredient choices</Text>
+              <Muted size={14}>Omit or restore ingredients; edit amounts in the existing units. Save a child version to resume coaching. Source steps and reference images stay mapped.</Muted>
+              {recipe?.ingredients.map(i => <View key={i.name} style={s.ingredientRow}>
+                <Text style={s.cue}>{i.name} · {i.unit || 'quantity'}</Text>
+                <View style={s.controls}>
+                  <TextInput style={s.quantity} accessibilityLabel={`Quantity of ${i.name}`} value={i.qty} editable={!i.omitted && !saving && !pendingVersion.current} onChangeText={qty => changeIngredient(i.name, { qty })} />
+                  <Button title={i.omitted ? 'Undo omission' : 'Omit'} variant="ghost" disabled={saving || !!pendingVersion.current} onPress={() => changeIngredient(i.name, { omitted: !i.omitted })} />
+                </View>
+              </View>)}
+              {preferenceError && <ErrorBox message={preferenceError} />}
+              {error && <ErrorBox message={error} />}
+              {saving && <Muted size={14}>Saving and attaching the child version… {Math.max(0, Math.floor((now - (actionStartedAt ?? now)) / 1000))}s</Muted>}
+              {dirty && <Button style={s.wrapButton} title={pendingVersion.current ? 'Retry attach saved version' : 'Save child version & apply'} loading={saving} onPress={() => void applyOptions()} />}
+            </ScrollView>
+            <Button title="Return to cook" variant="ghost" disabled={saving} onPress={() => setEditing(false)} />
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -379,13 +389,13 @@ const s = StyleSheet.create({
   fakeCamera: { backgroundColor: '#15151c', alignItems: 'center', justifyContent: 'center', gap: space.sm, padding: space.lg },
   fakeCameraEmoji: { fontSize: 72 },
   fakeCameraText: { color: colors.muted, fontSize: font.big, fontWeight: '700' },
-  overlay: { flex: 1, justifyContent: 'space-between', padding: space.md },
+  overlay: { flex: 1, gap: space.sm, padding: space.md },
   top: { gap: space.sm },
-  topScroll: { flexGrow: 0, flexShrink: 1, maxHeight: '50%' },
-  middleScroll: { flexGrow: 0, flexShrink: 1, maxHeight: '22%' },
+  cookScroll: { flex: 1 },
+  cookContent: { gap: space.md, paddingBottom: space.sm },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  topChips: { flexDirection: 'row', gap: space.sm },
-  iconBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center' },
+  topChips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  iconBtn: { flexShrink: 0, width: 48, height: 48, borderRadius: 24, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center' },
   iconText: { fontSize: 22 },
   stepBox: { backgroundColor: colors.overlay, borderRadius: radius.md, padding: space.md, gap: space.xs },
   stepText: { color: colors.text, fontSize: font.cook, fontWeight: '700', lineHeight: 30 },
@@ -400,13 +410,18 @@ const s = StyleSheet.create({
   mic: { width: 76, height: 76, borderRadius: 38, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   micIcon: { fontSize: 26 },
   micLabel: { color: colors.accentText, fontSize: 12, fontWeight: '800' },
-  controls: { flexDirection: 'row', gap: space.sm },
+  controls: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  wrapButton: { flexDirection: 'column', paddingVertical: space.sm },
+  navButton: { flex: 1, minWidth: 100, flexDirection: 'column', paddingVertical: space.sm },
   stats: { color: 'rgba(255,255,255,0.55)', fontSize: 12, textAlign: 'center' },
   permTitle: { color: colors.text, fontSize: font.title, fontWeight: '800', textAlign: 'center' },
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  sheet: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, paddingBottom: space.xl, gap: space.sm },
+  sheetHost: { flex: 1, justifyContent: 'flex-end' },
+  sheetBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)' },
+  sheetScroll: { flexShrink: 1 },
+  sheetContent: { gap: space.sm },
+  sheet: { maxHeight: '85%', flexShrink: 1, backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, paddingBottom: space.xl, gap: space.sm },
   sheetTitle: { color: colors.text, fontSize: font.title, fontWeight: '800' },
   ingredientRow: { gap: space.xs, marginBottom: space.md },
-  ingredientPill: { minHeight: 44, minWidth: 44, justifyContent: 'center' },
-  quantity: { flex: 1, minHeight: 52, padding: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, color: colors.text, fontSize: 18 },
+  ingredientPill: { maxWidth: '100%', minHeight: 44, minWidth: 44, justifyContent: 'center' },
+  quantity: { flex: 1, minWidth: 100, minHeight: 52, padding: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, color: colors.text, fontSize: 18 },
 });

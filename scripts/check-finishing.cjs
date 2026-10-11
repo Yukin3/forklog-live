@@ -414,7 +414,7 @@ function cookHarness({ failAttachOnce = false, restrictions = [] } = {}) {
   const voice = { revision: 0, isMuted: false, gate: { reset() {} }, prefetch: async () => {}, stopAll: async () => { voice.revision++; }, setMuted() {}, say: async line => { spoken.push(line); } };
   const load = loader({
     react: hooks,
-    'react-native': { View: 'View', Text: 'Text', TextInput: 'TextInput', ScrollView: 'ScrollView', Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: value => value, absoluteFill: {} }, Alert: { alert() {} } },
+    'react-native': { KeyboardAvoidingView: 'KeyboardAvoidingView', Platform: { OS: 'ios' }, View: 'View', Text: 'Text', TextInput: 'TextInput', ScrollView: 'ScrollView', Modal: 'Modal', Pressable: 'Pressable', StyleSheet: { create: value => value, absoluteFill: {} }, Alert: { alert() {} } },
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
     'expo-router': { router: { back() {}, replace() {} }, useLocalSearchParams: () => ({ recipeId: ids.recipe }) },
     'expo-camera': { CameraView: 'CameraView', useCameraPermissions: () => [{ granted: false }, async () => {}] },
@@ -654,8 +654,8 @@ function screenHarness(file, mocks = {}, params = {}) {
     useCallback(fn,deps){const i=index++;if(!same(cells[i]?.deps,deps))cells[i]={value:fn,deps};return cells[i].value;},
     useSyncExternalStore(subscribe,get){const i=index++;if(!cells[i])cells[i]={cleanup:subscribe(()=>{dirty=true;})};return get();},
   };
-  const native=Object.fromEntries(['View','Text','TextInput','ScrollView','ActivityIndicator','FlatList','Pressable','RefreshControl'].map(x=>[x,x]));
-  const load=loader({react:hooks,'react-native':{...native,StyleSheet:{create:x=>x},Alert:{alert(){}},Share:{share:async()=>({})}},
+  const native=Object.fromEntries(['View','Text','TextInput','ScrollView','KeyboardAvoidingView','ActivityIndicator','FlatList','Pressable','RefreshControl'].map(x=>[x,x]));
+  const load=loader({react:hooks,'react-native':{...native,Platform:{OS:'ios'},Keyboard:{dismiss(){}},StyleSheet:{create:x=>x},Alert:{alert(){}},Share:{share:async()=>({})}},
     'expo-router':{router:{navigate:r=>routes.push(r),push:r=>routes.push(r),setParams:p=>Object.assign(params,p)},useLocalSearchParams:()=>params,useFocusEffect:fn=>hooks.useEffect(fn,[fn]),Stack:{Screen:'Stack.Screen'}},
     'components/ui.tsx':Object.fromEntries(['Body','Button','Card','Centered','Chip','ErrorBox','Muted','Screen','Title'].map(x=>[x,x])),
     'lib/preferences.ts':{usePreferences:()=>({language:'en',error:null}),preferences:{setLanguage(){}}},

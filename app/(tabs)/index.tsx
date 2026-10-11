@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Keyboard, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Body, Button, Card, Centered, Chip, ErrorBox, Muted, Screen, Title } from '@/components/ui';
 import { colors, font, space } from '@/constants/theme';
@@ -100,7 +100,7 @@ export default function LibraryScreen() {
       {prefs.error && <ErrorBox message={prefs.error} />}
       {error && <ErrorBox message={error} />}
 
-      <TextInput value={query} onChangeText={setQuery} placeholder="Search titles or included ingredients" placeholderTextColor={colors.muted} style={{ color: colors.text, padding: space.md, borderWidth: 1, borderColor: colors.border }} />
+      <TextInput returnKeyType="search" onSubmitEditing={() => Keyboard.dismiss()} value={query} onChangeText={setQuery} placeholder="Search titles or included ingredients" placeholderTextColor={colors.muted} style={{ color: colors.text, padding: space.md, borderWidth: 1, borderColor: colors.border }} />
       <View style={s.meta}>{(['All', 'Recent', 'Processing'] as const).map(f => <Button key={f} title={f} variant={filter === f ? 'primary' : 'ghost'} onPress={() => setFilter(f)} />)}<Button title="Clear" variant="ghost" onPress={() => { setQuery(''); setFilter('All'); }} /></View>
       {filter === 'Recent' && <Muted size={13}>Recent = recipes created in the past 7 days.</Muted>}
       {showJob && <Card><Body bold>{pending.result?.recipe.title ?? pending.inputs.clip.name}</Body>{['queued', 'uploading', 'extracting'].includes(pending.stage) && <ActivityIndicator color={colors.accent} />}<Chip label={pending.stage} tone={pending.stage === 'failed' ? 'bad' : 'active'} /><Muted size={14}>{pending.demo ? 'Scripted demo' : 'Foreground import'} · {Math.max(0, Math.floor((clock - pending.startedAt) / 1000))}s · recipe {pending.result ? 'extracted' : 'not yet confirmed'}</Muted><Muted size={14}>References: {pending.frames ? `${pending.frames.done}/${pending.frames.total} attempts; ${pending.frames.succeeded} ready, ${pending.frames.failed} failed${pending.frames.scripted ? ' (simulated, no uploads)' : ''}` : 'not started'}</Muted>{pending.error && <ErrorBox message={pending.error} />}<Button title="Open import" onPress={() => router.navigate({ pathname: '/import', params: { jobId: pending.id } })} /></Card>}
@@ -110,6 +110,7 @@ export default function LibraryScreen() {
       <FlatList
         ListHeaderComponent={listHeader}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         data={visible}
         keyExtractor={i => i.id}
         contentContainerStyle={s.list}
@@ -154,7 +155,7 @@ export default function LibraryScreen() {
 const s = StyleSheet.create({
   header: { paddingVertical: space.md, gap: space.xs },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerBtn: { minHeight: 40, paddingHorizontal: space.md },
+  headerBtn: { minHeight: 44, paddingHorizontal: space.md },
   demoCard: { marginBottom: space.md, borderColor: colors.accent },
   demoRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   list: { gap: space.md, paddingBottom: 120, flexGrow: 1 },
