@@ -88,13 +88,14 @@ export default function ImportScreen() {
     setPicked(null); setCaption(''); setVariation(''); setSource(''); setError(null); setNewImport(true); router.setParams({ jobId: undefined });
   }
   const reviewInputs = () => ({ clip: picked!, caption, variation, source });
-  const notesInputs = <>
-    <Text style={s.section}>Caption / source / variation notes</Text>
+  const notesInputs = <Card>
+    <Body bold>Video notes</Body>
+    <Muted size={14}>Caption for extraction · public attribution · private variations</Muted>
     <TextInput style={s.input} placeholder="Caption" placeholderTextColor={colors.muted} multiline value={caption} onChangeText={v => { setCaption(v); if (!newImport) imports.editInputs({ caption: v }); }} editable={newImport || (!job?.applying && job?.stage !== 'ready')} />
     <TextInput style={s.input} placeholder="Public source attribution (optional)" placeholderTextColor={colors.muted} value={source} onChangeText={v => { setSource(v); if (!newImport) imports.editInputs({ source: v }); }} editable={newImport || (!job?.applying && job?.stage !== 'ready')} />
     <TextInput style={s.input} placeholder="Private variation notes (optional)" placeholderTextColor={colors.muted} multiline value={variation} onChangeText={v => { setVariation(v); if (!newImport) imports.editInputs({ variation: v }); }} editable={newImport || (!job?.applying && job?.stage !== 'ready')} />
-    <Muted size={14}>Extraction uses the caption captured at submission. Later edits are unapplied until review: saved as notes, without re-extraction or automatic ingredient changes. Edit ingredients during cooking.</Muted>
-  </>;
+    <Muted size={14}>Caption is captured when you submit. Later edits require review and save as notes only; change ingredients during cooking.</Muted>
+  </Card>;
   if (result && job && !newImport) {
     const r = result.recipe;
     const reminders = ingredientReminders(r.ingredients, restrictions);
@@ -119,6 +120,10 @@ export default function ImportScreen() {
             {notesInputs}
             <IngredientReview reminders={reminders} acknowledged={!needsReview} onAcknowledge={() => setReviewAcknowledged(key)} onLeave={() => router.navigate('/')} />
             <Chip label={`Recipe: ${job.stage}`} tone="active" />
+            {job.stage === 'review-needed' && <Button style={s.wrapButton} title="Confirm review & save notes" loading={job.applying} disabled={!job.referencesDone || needsReview} onPress={() => { if (!needsReview) void imports.applyReview(reviewInputs()); }} />}
+            {job.stage === 'ready' && <Button title="Cook reviewed version" size="lg" disabled={needsReview} onPress={() => { if (navigating.current) return; navigating.current = true; router.push({ pathname: '/cook/[recipeId]', params: { recipeId: job.recipeId!, versionId: result.versionId } }); }} />}
+            {!job.referencesDone && <Muted>Waiting for reference attempts before copying links to the reviewed version. You can browse Library meanwhile.</Muted>}
+            {job.stage === 'failed' && <><Button style={s.wrapButton} title="Check saved result / recover" onPress={() => void imports.retry()} /><Button style={s.wrapButton} title="Leave failed review (retain saved versions)" variant="ghost" onPress={() => { imports.dismiss(); reset(); }} /></>}
             <Text style={s.section}>Ingredients</Text>
             <Card>
               {r.ingredients.map((ing, i) => (
@@ -142,15 +147,8 @@ export default function ImportScreen() {
               </Card>
             ))}
 
-            {job.stage === 'review-needed' && <Button style={s.wrapButton} title="Confirm review & save notes" loading={job.applying} disabled={!job.referencesDone || needsReview} onPress={() => { if (!needsReview) void imports.applyReview(reviewInputs()); }} />}
-            {!job.referencesDone && <Muted>Waiting for reference attempts before copying links to the reviewed version. You can browse Library meanwhile.</Muted>}
-            {job.stage === 'failed' && <><Button style={s.wrapButton} title="Check saved result / recover" onPress={() => void imports.retry()} /><Button style={s.wrapButton} title="Leave failed review (retain saved versions)" variant="ghost" onPress={() => { imports.dismiss(); reset(); }} /></>}
             <Button title="Browse library" variant="ghost" onPress={() => router.navigate('/')} />
-            {job.stage === 'ready' && <>
-              <Button title="Cook reviewed version" size="lg" disabled={needsReview} onPress={() => { if (navigating.current) return; navigating.current = true; router.push({ pathname: '/cook/[recipeId]', params: { recipeId: job.recipeId!, versionId: result.versionId } }); }} />
-              <Button title="Open library" variant="ghost" onPress={() => router.navigate('/')} />
-              <Button title="Import another video" variant="ghost" onPress={reset} />
-            </>}
+            {job.stage === 'ready' && <Button title="Import another video" variant="ghost" onPress={reset} />}
           </ScrollView>
         </KeyboardAvoidingView>
       </Screen>
@@ -201,7 +199,7 @@ export default function ImportScreen() {
               <Muted size={14}>{phase === 'uploading' ? (demo ? 'Demo: pretending to upload.' : 'Sending to your Supabase bucket.') : demo ? 'Demo: returning the sample recipe.' : 'Usually 30–90 s for a 60 s clip. Gemini can be slower at peak times; you can browse Library while it runs.'}</Muted>
             </Card>
           ) : (
-            <Button title="Extract recipe" size="lg" disabled={!picked || phase === 'failed' || imports.locked} onPress={() => void extract()} />
+            <Button title="Extract recipe" variant={phase === 'failed' ? 'ghost' : 'primary'} size="lg" disabled={!picked || phase === 'failed' || imports.locked} onPress={() => void extract()} />
           )}
           <Button title="Browse library" variant="ghost" onPress={() => router.navigate('/')} />
         </ScrollView>

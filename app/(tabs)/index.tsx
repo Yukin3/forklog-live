@@ -61,7 +61,7 @@ export default function LibraryScreen() {
   const showJob = pending && filter !== 'Recent' && `${pending.inputs.clip.name} ${pending.result?.recipe.title ?? ''}`.toLowerCase().includes(query.trim().toLowerCase());
   const noBackend = !supabaseConfigured && !demo;
 
-  const listHeader = <>
+  const listHeader = <View style={s.headerContent}>
       <View style={s.header}>
         <View style={s.headerRow}>
           <Title>ForkLog</Title>
@@ -74,16 +74,7 @@ export default function LibraryScreen() {
         <Muted>Cook it like the video. Keep what you changed.</Muted>
       </View>
 
-      {demo && (
-        <Card style={s.demoCard}>
-          <View style={s.demoRow}>
-            <Chip label="DEMO" tone="active" />
-            <View style={{ flex: 1 }}><Body bold>Sample data, scripted coach, device voice.</Body></View>
-          </View>
-          <Muted size={14}>Import → pick “Use the demo clip”. Cook → watch the chips and corrections appear on each step. Finish → recap diff → save v2 → Versions.</Muted>
-          <Button title="Skip to the recap of a finished cook" variant="ghost" onPress={() => router.push(`/recap/${DEMO_IDS.cook}`)} />
-        </Card>
-      )}
+      {demo && <Muted>DEMO · sample data, scripted coach, device voice.</Muted>}
 
       {noBackend && (
         <Card style={s.demoCard}>
@@ -93,18 +84,27 @@ export default function LibraryScreen() {
         </Card>
       )}
 
+      <Button title="Preferences" variant="ghost" onPress={() => setShowRestrictions(!showRestrictions)} />
+      {showRestrictions && <View style={s.headerContent}>
       <View style={s.meta}><Muted size={14}>Preset guidance:</Muted><Button title="English" disabled={!prefs.loaded} variant={prefs.language === 'en' ? 'primary' : 'ghost'} onPress={() => preferences.setLanguage('en')} /><Button title="Español" disabled={!prefs.loaded} variant={prefs.language === 'es' ? 'primary' : 'ghost'} onPress={() => preferences.setLanguage('es')} /></View>
       <Muted size={13}>Device preference survives demo reset. Source recipe text and ingredient names remain untranslated; camera coaching stays in English.</Muted>
-      <Button title={`Ingredient reminders (${prefs.restrictions?.length ?? 0})`} variant="ghost" onPress={() => setShowRestrictions(!showRestrictions)} />
-      {showRestrictions && <Card><Body bold>Device ingredient reminders</Body><Muted size={14}>A small name/alias list only. These settings do not certify recipes or detect every allergen.</Muted><View style={s.meta}>{(Object.keys(RESTRICTIONS) as Restriction[]).map(key => <Button key={key} title={RESTRICTIONS[key]} disabled={!prefs.loaded} variant={prefs.restrictions?.includes(key) ? 'primary' : 'ghost'} onPress={() => preferences.setRestrictions(prefs.restrictions.includes(key) ? prefs.restrictions.filter(r => r !== key) : [...prefs.restrictions, key])} />)}</View></Card>}
+      <Card><Body bold>Device ingredient reminders</Body><Muted size={14}>A small name/alias list only. These settings do not certify recipes or detect every allergen.</Muted><View style={s.meta}>{(Object.keys(RESTRICTIONS) as Restriction[]).map(key => <Button key={key} title={RESTRICTIONS[key]} disabled={!prefs.loaded} variant={prefs.restrictions?.includes(key) ? 'primary' : 'ghost'} onPress={() => preferences.setRestrictions(prefs.restrictions.includes(key) ? prefs.restrictions.filter(r => r !== key) : [...prefs.restrictions, key])} />)}</View></Card>
+      {demo && <>
+          <Muted size={14}>Import → pick “Use the demo clip”. Cook → watch the chips and corrections appear on each step. Finish → recap diff → save v2 → Versions.</Muted>
+          <Button title="Skip to the recap of a finished cook" variant="ghost" onPress={() => router.push(`/recap/${DEMO_IDS.cook}`)} />
+      </>}
+      <Button title="Close preferences" variant="ghost" onPress={() => setShowRestrictions(false)} />
+      </View>}
       {prefs.error && <ErrorBox message={prefs.error} />}
       {error && <ErrorBox message={error} />}
 
+      <Card>
       <TextInput returnKeyType="search" onSubmitEditing={() => Keyboard.dismiss()} value={query} onChangeText={setQuery} placeholder="Search titles or included ingredients" placeholderTextColor={colors.muted} style={{ color: colors.text, padding: space.md, borderWidth: 1, borderColor: colors.border }} />
-      <View style={s.meta}>{(['All', 'Recent', 'Processing'] as const).map(f => <Button key={f} title={f} variant={filter === f ? 'primary' : 'ghost'} onPress={() => setFilter(f)} />)}<Button title="Clear" variant="ghost" onPress={() => { setQuery(''); setFilter('All'); }} /></View>
+      <View style={s.meta}>{(['All', 'Recent', 'Processing'] as const).map(f => <Button style={s.filterButton} key={f} title={f} variant={filter === f ? 'primary' : 'ghost'} onPress={() => setFilter(f)} />)}<Button style={s.filterButton} title="Clear" variant="ghost" onPress={() => { setQuery(''); setFilter('All'); }} /></View>
       {filter === 'Recent' && <Muted size={13}>Recent = recipes created in the past 7 days.</Muted>}
-      {showJob && <Card><Body bold>{pending.result?.recipe.title ?? pending.inputs.clip.name}</Body>{['queued', 'uploading', 'extracting'].includes(pending.stage) && <ActivityIndicator color={colors.accent} />}<Chip label={pending.stage} tone={pending.stage === 'failed' ? 'bad' : 'active'} /><Muted size={14}>{pending.demo ? 'Scripted demo' : 'Foreground import'} · {Math.max(0, Math.floor((clock - pending.startedAt) / 1000))}s · recipe {pending.result ? 'extracted' : 'not yet confirmed'}</Muted><Muted size={14}>References: {pending.frames ? `${pending.frames.done}/${pending.frames.total} attempts; ${pending.frames.succeeded} ready, ${pending.frames.failed} failed${pending.frames.scripted ? ' (simulated, no uploads)' : ''}` : 'not started'}</Muted>{pending.error && <ErrorBox message={pending.error} />}<Button title="Open import" onPress={() => router.navigate({ pathname: '/import', params: { jobId: pending.id } })} /></Card>}
-    </>;
+      </Card>
+      {showJob && <Card><Body bold>{pending.result?.recipe.title ?? pending.inputs.clip.name}</Body>{['queued', 'uploading', 'extracting'].includes(pending.stage) && <ActivityIndicator color={colors.accent} />}<Chip label={pending.stage} tone={pending.stage === 'failed' ? 'bad' : 'active'} /><Muted size={14}>{pending.demo ? 'Scripted demo' : 'Foreground import'} · {Math.max(0, Math.floor((clock - pending.startedAt) / 1000))}s</Muted><Muted size={14}>{pending.frames?.scripted ? 'References simulated; no images uploaded.' : pending.frames && pending.frames.failed > 0 ? `${pending.frames.failed} reference attempts failed; review in Import.` : pending.result ? 'Recipe extracted; references have separate progress in Import.' : 'Recipe extraction pending.'}</Muted>{pending.error && <ErrorBox message={pending.error} />}<Button title={pending.stage === 'review-needed' ? 'Review recipe' : pending.stage === 'failed' ? 'Open recovery' : 'Open import'} onPress={() => router.navigate({ pathname: '/import', params: { jobId: pending.id } })} /></Card>}
+    </View>;
   return (
     <Screen>
       <FlatList
@@ -153,6 +153,8 @@ export default function LibraryScreen() {
 }
 
 const s = StyleSheet.create({
+  headerContent: { gap: space.md },
+  filterButton: { flexGrow: 1, flexBasis: '40%', minWidth: 120, paddingHorizontal: space.sm, flexDirection: 'column' },
   header: { paddingVertical: space.md, gap: space.xs },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerBtn: { minHeight: 44, paddingHorizontal: space.md },
